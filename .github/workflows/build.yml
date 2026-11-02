@@ -1,0 +1,38 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.2.1
+      - run: gradle assembleDebug --no-daemon
+      - name: 上传 APK 构件
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doudizhu-ai-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+      - name: 发布 APK 到 Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
+            --repo "$GITHUB_REPOSITORY" --title "斗地主AI APK $TAG" \
+            --notes "GitHub Actions 自动构建（debug）"

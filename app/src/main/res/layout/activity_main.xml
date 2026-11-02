@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#FF1A1A2E">
+    
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="斗地主AI"
+        android:textSize="28sp"
+        android:textColor="#FFE94560"
+        android:textStyle="bold"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="20dp"/>
+    
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="状态: 未启动"
+        android:textSize="16sp"
+        android:textColor="#FFFFFFFF"
+        android:layout_marginTop="20dp"/>
+    
+    <TextView
+        android:id="@+id/tv_cards"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="手牌: "
+        android:textSize="16sp"
+        android:textColor="#FFFFFFFF"
+        android:layout_marginTop="10dp"/>
+    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="20dp">
+        
+        <Button
+            android:id="@+id/btn_start"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="启动AI"
+            android:layout_marginEnd="8dp"
+            android:backgroundTint="#FF4CAF50"/>
+        
+        <Button
+            android:id="@+id/btn_stop"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="停止AI"
+            android:enabled="false"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:backgroundTint="#FFF44336"/>
+        
+        <Button
+            android:id="@+id/btn_settings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="设置"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="#FF2196F3"/>
+    </LinearLayout>
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="运行日志:"
+        android:textSize="14sp"
+        android:textColor="#FFAAAAAA"
+        android:layout_marginTop="20dp"/>
+    
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="5dp"
+        android:background="#FF16213E"
+        android:padding="8dp">
+        
+        <TextView
+            android:id="@+id/tv_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#FF00FF00"
+            android:fontFamily="monospace"/>
+    </ScrollView>
+</LinearLayout>
