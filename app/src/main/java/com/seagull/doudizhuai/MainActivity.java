@@ -1,192 +1,242 @@
 package com.seagull.doudizhuai;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.media.projection.MediaProjectionManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.view.View;
+import android.provider.Settings;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.content.Intent;
-import android.net.Uri;
-import android.provider.Settings;
-import android.graphics.Bitmap;
-import android.os.Handler;
-import java.io.File;
-import java.io.FileOutputStream;
 
 /**
- * 欢乐斗地主AI助手 - 海鸥出品
- * 操，这他妈是个完整的APP！
+ * 斗地主AI 主界面（真实可用版 v2）
+ * - 连接本机/局域网 DouZero 决策服务
+ * - 手动输入手牌问 AI（服务端真模型）
+ * - MediaProjection 截屏 + 悬浮窗（为后续自动识别做准备）
+ * - 抓帧存档：供调试手牌识别
  */
 public class MainActivity extends Activity {
-    
-    private Button btnStart;
-    private Button btnStop;
-    private Button btnSettings;
-    private TextView tvStatus;
-    private TextView tvCards;
-    private TextView tvLog;
-    
-    private boolean isRunning = false;
-    private Handler handler = new Handler();
-    private AIEngine aiEngine;
-    
+
+    private static final int REQ_OVERLAY = 1001;
+    private static final int REQ_PROJECTION = 1002;
+    private static final int REQ_NOTIFICATION = 1003;
+
+    private static final String[] POSITIONS = {"landlord", "landlord_up", "landlord_down"};
+
+    private Button btnStart, btnStop, btnAsk, btnCapture, btnPos;
+    private EditText etServer, etHand, etLast;
+    private TextView tvStatus, tvAdvice, tvLog;
+
+    private String position = "landlord_up";
+    private boolean serviceRunning = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        
-        initViews();
-        initEngine();
-        checkPermissions();
-    }
-    
-    private void initViews() {
+
         btnStart = findViewById(R.id.btn_start);
         btnStop = findViewById(R.id.btn_stop);
-        btnSettings = findViewById(R.id.btn_settings);
+        btnAsk = findViewById(R.id.btn_ask);
+        btnCapture = findViewById(R.id.btn_capture);
+        btnPos = findViewById(R.id.btn_pos);
+        etServer = findViewById(R.id.et_server);
+        etHand = findViewById(R.id.et_hand);
+        etLast = findViewById(R.id.et_last);
         tvStatus = findViewById(R.id.tv_status);
-        tvCards = findViewById(R.id.tv_cards);
+        tvAdvice = findViewById(R.id.tv_advice);
         tvLog = findViewById(R.id.tv_log);
-        
-        btnStart.setOnClickListener(v -> startAI());
-        btnStop.setOnClickListener(v -> stopAI());
-        btnSettings.setOnClickListener(v -> openSettings());
-        
-        updateUI();
-    }
-    
-    private void initEngine() {
-        aiEngine = new AIEngine(this, new AIEngine.Callback() {
-            @Override
-            public void onStatusUpdate(String status) {
-                runOnUiThread(() -> {
-                    tvStatus.setText("状态: " + status);
-                    addLog(status);
-                });
+
+        if (savedInstanceState != null) {
+            position = savedInstanceState.getString("position", "landlord_up");
+            serviceRunning = savedInstanceState.getBoolean("running", false);
+            etServer.setText(savedInstanceState.getString("server", etServer.getText().toString()));
+            etHand.setText(savedInstanceState.getString("hand", ""));
+            etLast.setText(savedInstanceState.getString("last", ""));
+        }
+
+        btnStart.setOnClickListener(v -> onStartClick());
+        btnStop.setOnClickListener(v -> onStopClick());
+        btnAsk.setOnClickListener(v -> askAi());
+        btnCapture.setOnClickListener(v -> captureFrame());
+        btnPos.setOnClickListener(v -> {
+            int i = 0;
+            for (int k = 0; k < POSITIONS.length; k++) {
+                if (POSITIONS[k].equals(position)) i = (k + 1) % POSITIONS.length;
             }
-            
-            @Override
-            public void onCardsDetected(String cards) {
-                runOnUiThread(() -> {
-                    tvCards.setText("手牌: " + cards);
-                    addLog("识别到手牌: " + cards);
-                });
-            }
-            
-            @Override
-            public void onPlayDecision(String decision) {
-                runOnUiThread(() -> {
-                    addLog("AI决策: " + decision);
-                });
-            }
-            
-            @Override
-            public void onError(String error) {
-                runOnUiThread(() -> {
-                    addLog("错误: " + error);
-                    Toast.makeText(MainActivity.this, error, Toast.LENGTH_SHORT).show();
-                });
-            }
+            position = POSITIONS[i];
+            updatePosButton();
+            addLog("身份切换: " + position);
         });
+
+        updateUI();
+        checkPermissions();
+        addLog("斗地主AI 已启动。服务地址: " + defaultServer());
     }
-    
+
+    private String defaultServer() {
+        return etServer.getText().toString().trim();
+    }
+
     private void checkPermissions() {
-        // 检查悬浮窗权限
         if (!Settings.canDrawOverlays(this)) {
+            addLog("需要悬浮窗权限，正在跳转设置…");
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
-            startActivityForResult(intent, 1001);
+            startActivityForResult(intent, REQ_OVERLAY);
         }
-        
-        // 检查无障碍权限
-        if (!isAccessibilityEnabled()) {
-            Toast.makeText(this, "请开启无障碍服务", Toast.LENGTH_LONG).show();
-            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            startActivity(intent);
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATION);
         }
     }
-    
-    private boolean isAccessibilityEnabled() {
-        // TODO: 检查无障碍服务是否开启
-        return false;
-    }
-    
-    private void startAI() {
-        if (isRunning) {
-            Toast.makeText(this, "AI已经在运行了", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
+
+    private void onStartClick() {
         if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "需要悬浮窗权限", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivityForResult(intent, REQ_OVERLAY);
             return;
         }
-        
-        isRunning = true;
-        updateUI();
-        aiEngine.start();
-        addLog("AI启动成功");
-    }
-    
-    private void stopAI() {
-        if (!isRunning) {
-            return;
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATION);
         }
-        
-        isRunning = false;
-        updateUI();
-        aiEngine.stop();
-        addLog("AI已停止");
+        // 请求屏幕捕获授权
+        MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        startActivityForResult(mpm.createScreenCaptureIntent(), REQ_PROJECTION);
     }
-    
-    private void openSettings() {
-        // TODO: 打开设置界面
-        Toast.makeText(this, "设置功能开发中", Toast.LENGTH_SHORT).show();
-    }
-    
-    private void updateUI() {
-        btnStart.setEnabled(!isRunning);
-        btnStop.setEnabled(isRunning);
-        
-        if (isRunning) {
-            tvStatus.setText("状态: 运行中");
-            btnStart.setAlpha(0.5f);
-            btnStop.setAlpha(1.0f);
-        } else {
-            tvStatus.setText("状态: 已停止");
-            btnStart.setAlpha(1.0f);
-            btnStop.setAlpha(0.5f);
-        }
-    }
-    
-    private void addLog(String log) {
-        String currentLog = tvLog.getText().toString();
-        String newLog = "[" + getCurrentTime() + "] " + log + "\n" + currentLog;
-        
-        // 限制日志长度
-        String[] lines = newLog.split("\n");
-        if (lines.length > 50) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < 50; i++) {
-                sb.append(lines[i]).append("\n");
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PROJECTION) {
+            if (resultCode == RESULT_OK && data != null) {
+                Intent svc = new Intent(this, CaptureService.class);
+                svc.setAction(CaptureService.ACTION_START);
+                svc.putExtra(CaptureService.EXTRA_CODE, resultCode);
+                svc.putExtra(CaptureService.EXTRA_DATA, data);
+                if (Build.VERSION.SDK_INT >= 26) {
+                    startForegroundService(svc);
+                } else {
+                    startService(svc);
+                }
+                serviceRunning = true;
+                addLog("屏幕捕获已授权，悬浮窗服务启动");
+                Toast.makeText(this, "截屏服务已启动", Toast.LENGTH_SHORT).show();
+            } else {
+                addLog("用户取消了屏幕捕获授权");
             }
+        }
+        updateUI();
+    }
+
+    private void onStopClick() {
+        Intent svc = new Intent(this, CaptureService.class);
+        svc.setAction(CaptureService.ACTION_STOP);
+        startService(svc);
+        serviceRunning = false;
+        addLog("服务停止");
+        updateUI();
+    }
+
+    private void captureFrame() {
+        if (!serviceRunning) {
+            Toast.makeText(this, "先启动悬浮窗服务", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent svc = new Intent(this, CaptureService.class);
+        svc.setAction(CaptureService.ACTION_SAVE_FRAME);
+        startService(svc);
+        addLog("抓帧命令已发送");
+    }
+
+    private void askAi() {
+        String hand = etHand.getText().toString().trim();
+        if (hand.isEmpty()) {
+            Toast.makeText(this, "请先输入手牌", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String server = defaultServer();
+        if (server.isEmpty()) {
+            Toast.makeText(this, "请填写服务地址", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        tvAdvice.setText("建议: 请求中…");
+        addLog("问 AI: 手牌=" + hand + " 身份=" + position + " 服务=" + server);
+        new Thread(() -> {
+            DecisionClient.Result r = DecisionClient.ask(server, hand, etLast.getText().toString().trim(), position);
+            runOnUiThread(() -> {
+                if (r.error != null) {
+                    tvAdvice.setText("建议: 出错 " + r.error);
+                    addLog("问 AI 失败: " + r.error);
+                } else {
+                    tvAdvice.setText("建议: 出 " + r.action + "（" + r.latencyMs + "ms）");
+                    addLog("AI 建议: " + r.action);
+                    Intent svc = new Intent(MainActivity.this, CaptureService.class);
+                    svc.setAction(CaptureService.ACTION_SHOW_TEXT);
+                    svc.putExtra(CaptureService.EXTRA_TEXT, "AI 建议: 出 " + r.action);
+                    startService(svc);
+                }
+            });
+        }).start();
+    }
+
+    private void updateUI() {
+        if (serviceRunning) {
+            tvStatus.setText("状态: 运行中（截屏+悬浮窗）");
+            btnStart.setAlpha(0.5f);
+            btnStop.setEnabled(true);
+        } else {
+            tvStatus.setText("状态: 未启动");
+            btnStart.setAlpha(1.0f);
+            btnStop.setEnabled(false);
+        }
+        updatePosButton();
+    }
+
+    private void updatePosButton() {
+        String label;
+        switch (position) {
+            case "landlord": label = "地主"; break;
+            case "landlord_down": label = "地主下家"; break;
+            default: label = "非地主（上家视角）"; break;
+        }
+        btnPos.setText("身份: " + label + " → 点击切换");
+    }
+
+    private void addLog(String log) {
+        String current = tvLog.getText().toString();
+        String newLog = "[" + getCurrentTime() + "] " + log + "\n" + current;
+        String[] lines = newLog.split("\n");
+        if (lines.length > 60) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 60; i++) sb.append(lines[i]).append("\n");
             newLog = sb.toString();
         }
-        
         tvLog.setText(newLog);
     }
-    
+
     private String getCurrentTime() {
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss");
-        return sdf.format(new java.util.Date());
+        return new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
+                .format(new java.util.Date());
     }
-    
+
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (isRunning) {
-            stopAI();
-        }
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString("position", position);
+        outState.putBoolean("running", serviceRunning);
+        outState.putString("server", etServer.getText().toString());
+        outState.putString("hand", etHand.getText().toString());
+        outState.putString("last", etLast.getText().toString());
     }
 }
