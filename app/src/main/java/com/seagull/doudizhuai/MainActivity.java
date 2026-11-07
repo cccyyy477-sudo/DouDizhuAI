@@ -72,15 +72,41 @@ public class MainActivity extends Activity {
             position = POSITIONS[i];
             updatePosButton();
             addLog("身份切换: " + position);
+            persistPrefs();
         });
+
+        // 服务地址 / 上家出牌 一改动就落盘（CaptureService 抓帧时读取）
+        android.text.TextWatcher tw = new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) { persistPrefs(); }
+        };
+        etServer.addTextChangedListener(tw);
+        etLast.addTextChangedListener(tw);
 
         updateUI();
         checkPermissions();
+        persistPrefs();
         addLog("斗地主AI 已启动。服务地址: " + defaultServer());
     }
 
     private String defaultServer() {
         return etServer.getText().toString().trim();
+    }
+
+    /** 服务地址/身份/上家出牌 落盘，供 CaptureService 抓帧时读取 */
+    private void persistPrefs() {
+        getSharedPreferences("ddz", MODE_PRIVATE).edit()
+                .putString("server", defaultServer())
+                .putString("position", position)
+                .putString("last_play", etLast.getText().toString().trim())
+                .apply();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        persistPrefs();
     }
 
     private void checkPermissions() {
@@ -149,8 +175,8 @@ public class MainActivity extends Activity {
     }
 
     private void captureFrame() {
-        if (!serviceRunning) {
-            Toast.makeText(this, "先启动悬浮窗服务", Toast.LENGTH_SHORT).show();
+        if (!CaptureService.isRunning() && !serviceRunning) {
+            Toast.makeText(this, "先启动悬浮窗服务（点启动并完成截屏授权）", Toast.LENGTH_SHORT).show();
             return;
         }
         Intent svc = new Intent(this, CaptureService.class);
