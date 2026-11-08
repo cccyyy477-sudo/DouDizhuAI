@@ -345,6 +345,8 @@ public class CaptureService extends Service {
         // 出牌事件：左右区域出现新牌 = 对手出牌；我出牌区出现新牌 或 手牌减少 = 我出牌
         // 事件判定用"点数集合"而非原始字符串：识别顺序抖动(4,3,3 vs 3,4,3)不应重复触发事件，
         // 否则同一手牌会反复刷 lastEventArea/lastEventCards，身份推断和 last_play 全被污染。
+        // 注意：normCards() 返回带方括号的 "[3, 7]"（只用于比较），传给 lastEventCards 必须用原始串
+        //       （空格分隔 "3 7"），否则服务端 parseCards 会得到 "[3" 这类非法牌名 → 400。
         String nL = normCards(left), nR = normCards(right), nM = normCards(mine);
         boolean newL = !nL.isEmpty() && !nL.equals(normCards(prevL));
         boolean newR = !nR.isEmpty() && !nR.equals(normCards(prevR));
@@ -354,8 +356,8 @@ public class CaptureService extends Service {
         boolean nDrop = obsN > 0 && n > 0 && n < obsN;
         lowNCount = nDrop ? lowNCount + 1 : 0;
         boolean myPlay = newM || lowNCount >= 2;
-        if (newL) handleEventLocked("L", nL);
-        if (newR) handleEventLocked("R", nR);
+        if (newL) handleEventLocked("L", left);      // 原始串（"3 7"），不是 normCards 的 "[3, 7]"
+        if (newR) handleEventLocked("R", right);
         if (myPlay && !lastEventArea.isEmpty()) {
             myBeforeArea = lastEventArea;   // 我出牌前最后出牌的 = 我的上家
             pendingAfter = true;
