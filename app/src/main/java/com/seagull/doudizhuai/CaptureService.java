@@ -401,13 +401,19 @@ public class CaptureService extends Service {
         }
         if (firstArea.isEmpty() || autoPos.isEmpty()) return;
         if ("landlord".equals(autoPos)) {
+            // 我是地主：第一个出牌的对手 = 我的下家，第二个 = 我的上家
             setLabelLocked(firstArea, "下家");
             if (!secondArea.isEmpty()) setLabelLocked(secondArea, "上家");
         } else {
+            // 我是农民：firstArea = 地主；other = 另一个农民（我的对手）
+            // 斗地主顺序：地主 → 地主下家 → 地主上家 → 地主
+            //   我是 landlord_down(地主下家) → 我出完轮到对手 → 对手是地主的【上家】
+            //   我是 landlord_up(地主上家)   → 对手是地主的【下家】
+            // （原代码两个标签写反，导致"上家出牌显示成下家"）
             setLabelLocked(firstArea, "地主");
             String other = "L".equals(firstArea) ? "R" : "L";
-            if ("landlord_down".equals(autoPos)) setLabelLocked(other, "下家");
-            else if ("landlord_up".equals(autoPos)) setLabelLocked(other, "上家");
+            if ("landlord_down".equals(autoPos)) setLabelLocked(other, "上家");
+            else if ("landlord_up".equals(autoPos)) setLabelLocked(other, "下家");
         }
     }
 
