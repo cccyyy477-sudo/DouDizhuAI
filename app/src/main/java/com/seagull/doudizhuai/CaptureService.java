@@ -66,6 +66,7 @@ public class CaptureService extends Service {
     private volatile boolean running;
     private volatile int frameCount;
     private volatile String lastError = "";
+    private volatile int failCount = 0;   // 连续识别失败次数（非对局画面时收敛提示）
     private volatile Bitmap lastFrame;
     private int saveSeq = 0;
     private volatile boolean advising = false;   // 识别请求进行中（防并发）
@@ -494,15 +495,26 @@ public class CaptureService extends Service {
             DecisionClient.AdviseResult r = DecisionClient.advise(server, b64, pos, last);
             final String text;
             if (r.error != null) {
-                text = "识别失败\n" + r.error;
+                // 服务端已给用户能懂的文案（未在对局画面/画面无内容等），不加"识别失败"前缀吓人；
+                // 连续失败（结算页/微信/黑屏时每2.5s一次）第4次起收敛为一行，避免刷屏。
+                failCount++;
+                if (failCount >= 4) {
+                    text = "等待对局画面…\n（进入牌局后自动识别）";
+                } else {
+                    text = r.error;
+                }
             } else if (r.warn != null) {
+                failCount = 0;
                 text = r.warn;                       // 点数样本不足等警告
             } else if (!myTurn) {
+                failCount = 0;
                 // 未轮到我（开局/对手出牌中）→ 不给建议，只报状态
                 text = "等待对手出牌…\n手牌" + r.n + "张 · " + r.latencyMs + "ms";
             } else if (r.action == null || r.action.isEmpty()) {
+                failCount = 0;
                 text = "不出\n手牌" + r.n + "张 · " + r.latencyMs + "ms";
             } else {
+                failCount = 0;
                 text = "建议出 " + r.action + "\n"
                         + r.n + "张 · " + r.latencyMs + "ms";
             }
