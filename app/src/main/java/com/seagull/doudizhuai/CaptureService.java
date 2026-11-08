@@ -421,6 +421,30 @@ public class CaptureService extends Service {
         if ("L".equals(area)) leftLabel = label; else rightLabel = label;
     }
 
+    /** 是否轮到我出牌（须持 stLock）。pos=当前生效身份(手动优先)。
+     *  依据：firstArea=第一个出牌的对手、secondArea=第二个、lastEventArea=最后出牌的区域、
+     *        pendingAfter=我刚出完牌(等对手)。
+     *  出牌顺序：地主 → 地主下家 → 地主上家 → 地主 … */
+    private boolean isMyTurnLocked(String pos) {
+        if (pendingAfter) return false;                 // 我刚出完，等对手
+        if (lastEventArea.isEmpty()) {
+            return "landlord".equals(pos);              // 没人出过：只有地主有首出权
+        }
+        if ("landlord".equals(pos)) {
+            // 我是地主：我出→下家(firstArea)→上家(secondArea)→轮到我
+            return !secondArea.isEmpty() && lastEventArea.equals(secondArea);
+        } else if ("landlord_down".equals(pos)) {
+            // 我是地主下家：地主(firstArea)出完 → 轮到我
+            return !firstArea.isEmpty() && lastEventArea.equals(firstArea);
+        } else if ("landlord_up".equals(pos)) {
+            // 我是地主上家：地主→下家(other)出完 → 轮到我
+            if (firstArea.isEmpty()) return false;
+            String other = "L".equals(firstArea) ? "R" : "L";
+            return lastEventArea.equals(other);
+        }
+        return false;                                   // 身份未知 → 不给建议
+    }
+
     /** 自动识别：用已缓存的最新帧（不存图，省相册），悬浮窗刷新建议 */
     private void adviseAuto(boolean force) {
         if (advising && !force) return;
@@ -452,11 +476,13 @@ public class CaptureService extends Service {
         final String server = sp.getString("server", "http://10.50.39.114:5000/predict");
         final String pos;
         final String last;
+        final boolean myTurn;   // 请求前捕获（请求期间状态可能变，以发起时为准）
         synchronized (stLock) {
             String manual = sp.getString("position", "");
             pos = (manualPos && !manual.isEmpty()) ? manual
                     : (autoPos.isEmpty() ? "landlord_up" : autoPos);
             last = lastEventCards;   // 最后一个对手出的牌 = 轮到我时我的上家的牌
+            myTurn = isMyTurnLocked(pos);
         }
 
         // 压缩成 JPEG 再 base64（PNG 原图 2-5MB，JPEG q72 约 200-400KB）
@@ -471,6 +497,9 @@ public class CaptureService extends Service {
                 text = "识别失败\n" + r.error;
             } else if (r.warn != null) {
                 text = r.warn;                       // 点数样本不足等警告
+            } else if (!myTurn) {
+                // 未轮到我（开局/对手出牌中）→ 不给建议，只报状态
+                text = "等待对手出牌…\n手牌" + r.n + "张 · " + r.latencyMs + "ms";
             } else if (r.action == null || r.action.isEmpty()) {
                 text = "不出\n手牌" + r.n + "张 · " + r.latencyMs + "ms";
             } else {
