@@ -34,6 +34,7 @@ public class DecisionClient {
         public String playedLeft;   // 上家（左）出的牌，空格分隔，空=无
         public String playedRight;  // 下家（右）出的牌
         public String playedMine;   // 我出的牌（下方中央）
+        public Boolean myTurn;      // 服务端出牌按钮检测：轮到我出牌（null=未返回）
     }
 
     /** 从 /predict 或 /base URL 推导 /advise URL */
@@ -107,6 +108,9 @@ public class DecisionClient {
                 res.playedLeft = joinCards(pl.optJSONArray("left"));
                 res.playedRight = joinCards(pl.optJSONArray("right"));
                 res.playedMine = joinCards(pl.optJSONArray("mine"));
+            }
+            if (j.has("my_turn") && !j.isNull("my_turn")) {
+                res.myTurn = j.getBoolean("my_turn");   // 服务端出牌按钮检测
             }
             return res;
         } catch (Exception e) {

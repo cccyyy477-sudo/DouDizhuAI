@@ -493,6 +493,9 @@ public class CaptureService extends Service {
 
         new Thread(() -> {
             DecisionClient.AdviseResult r = DecisionClient.advise(server, b64, pos, last);
+            // 轮次：优先用服务端的出牌按钮检测（最可靠——对手"过"不产生事件，
+            // 状态机推断会断链导致"轮到我也不给建议"）；服务端没返回时才用状态机兜底。
+            final boolean myTurnNow = (r.myTurn != null) ? r.myTurn : myTurn;
             final String text;
             if (r.error != null) {
                 // 服务端已给用户能懂的文案（未在对局画面/画面无内容等），不加"识别失败"前缀吓人；
@@ -506,9 +509,9 @@ public class CaptureService extends Service {
             } else if (r.warn != null) {
                 failCount = 0;
                 text = r.warn;                       // 点数样本不足等警告
-            } else if (!myTurn) {
+            } else if (!myTurnNow) {
                 failCount = 0;
-                // 未轮到我（开局/对手出牌中）→ 不给建议，只报状态
+                // 未轮到我（对手出牌/过牌中、我刚出完）→ 不给建议，只报状态
                 text = "等待对手出牌…\n手牌" + r.n + "张 · " + r.latencyMs + "ms";
             } else if (r.action == null || r.action.isEmpty()) {
                 failCount = 0;
