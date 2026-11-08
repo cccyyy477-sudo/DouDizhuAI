@@ -132,7 +132,10 @@ public class CaptureService extends Service {
             releaseProjection();
             running = true;
             initProjection(code, data);
+            handler.removeCallbacks(frameLoop);      // 防重复启动叠加
+            handler.removeCallbacks(adviseLoop);
             handler.postDelayed(frameLoop, 800);
+            handler.postDelayed(adviseLoop, 1500);   // 自动识别循环：首帧后每 2.5s 刷新
         } else if (ACTION_SAVE_FRAME.equals(action)) {
             handler.post(this::grabAndSave);
         } else if (ACTION_SHOW_TEXT.equals(action)) {
